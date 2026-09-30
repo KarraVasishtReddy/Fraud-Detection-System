@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fraud Detection Prototype</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--text:#1a1d21;--muted:#6b7280;--line:#e2e5ea;--accent:#2563eb;--ok:#16a34a;--bad:#dc2626;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1114;--card:#181b20;--text:#e8eaed;--muted:#9aa1ab;--line:#2a2e35;--accent:#5b8def;--ok:#34d399;--bad:#f87171}}
+:root[data-theme="dark"]{--bg:#0f1114;--card:#181b20;--text:#e8eaed;--muted:#9aa1ab;--line:#2a2e35;--accent:#5b8def;--ok:#34d399;--bad:#f87171}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:22px;margin:0 0 4px}
+.sub{color:var(--muted);margin:0 0 18px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:700px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+label{display:block;font-size:12px;color:var(--muted);margin:10px 0 4px}
+input,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chk{display:flex;gap:16px;margin-top:12px;flex-wrap:wrap}
+.chk label{display:flex;align-items:center;gap:6px;margin:0;color:var(--text);font-size:14px}
+.chk input{width:auto}
+.btns{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+button{padding:9px 14px;border-radius:8px;border:1px solid var(--line);background:var(--card);color:var(--text);font:inherit;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.gauge{height:14px;border-radius:7px;background:var(--line);position:relative;overflow:visible;margin:14px 0 6px}
+.fill{height:100%;border-radius:7px;background:var(--ok);width:0;transition:width .4s,background .3s}
+.thr{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--text);opacity:.6}
+.big{font-size:40px;font-weight:700;line-height:1}
+.badge{display:inline-block;padding:3px 10px;border-radius:99px;font-size:13px;font-weight:600;color:#fff;background:var(--ok)}
+.badge.bad{background:var(--bad)}
+ul{padding-left:18px;margin:8px 0 0}
+li{margin:3px 0}
+.note{font-size:12px;color:var(--muted);margin-top:14px}
+</style>
+</head>
+<body>
+<main>
+  <h1>Fraud Detection Prototype</h1>
+  <p class="sub">Enter a transaction and see the fraud score, decision and top risk factors.</p>
+  <div class="grid">
+    <section class="card">
+      <div class="row">
+        <div><label for="amount">Amount</label><input id="amount" type="number" min="1" value="45"></div>
+        <div><label for="avg">Customer 30-day avg</label><input id="avg" type="number" min="1" value="40"></div>
+      </div>
+      <div class="row">
+        <div><label for="hour">Hour of day (0-23)</label><input id="hour" type="number" min="0" max="23" value="14"></div>
+        <div><label for="dist">Distance from home (km)</label><input id="dist" type="number" min="0" value="3"></div>
+      </div>
+      <div class="row">
+        <div><label for="cat">Merchant category</label>
+          <select id="cat"><option>grocery</option><option>fuel</option><option>dining</option><option>utilities</option><option>travel</option><option>electronics</option><option>luxury</option><option>gambling</option></select></div>
+        <div><label for="chan">Channel</label>
+          <select id="chan"><option>pos</option><option>ecom</option><option>atm</option><option>wallet</option></select></div>
+      </div>
+      <label for="vel">Transactions in last 24h</label><input id="vel" type="number" min="0" value="1">
+      <div class="chk">
+        <label><input id="foreign" type="checkbox"> Foreign</label>
+        <label><input id="newdev" type="checkbox"> New device</label>
+      </div>
+      <div class="btns">
+        <button class="primary" id="go">Score transaction</button>
+        <button id="p1">Normal example</button>
+        <button id="p2">Suspicious example</button>
+      </div>
+    </section>
+    <section class="card">
+      <div class="big" id="pct">–</div>
+      <div style="margin-top:8px"><span class="badge" id="badge">Waiting</span></div>
+      <div class="gauge"><div class="fill" id="fill"></div><div class="thr" id="thr"></div></div>
+      <div style="font-size:12px;color:var(--muted)">Line marks the alert threshold (90.7%, set for a 1% false-positive budget)</div>
+      <h3 style="font-size:14px;margin:18px 0 0">Top risk factors</h3>
+      <ul id="why"><li style="color:var(--muted)">Score a transaction to see why.</li></ul>
+      <p class="note">Prototype: a simple in-browser scoring formula stands in for the trained gradient-boosted model, so the numbers are illustrative. The real model runs behind the <code>/score</code> API.</p>
+    </section>
+  </div>
+</main>
+<script>
+const $=id=>document.getElementById(id), THR=0.907;
+$("thr").style.left=(THR*100)+"%";
+function score(){
+  const amount=+$("amount").value||1, avg=+$("avg").value||1, hour=+$("hour").value||0, dist=+$("dist").value||0,
+        vel=+$("vel").value||0, cat=$("cat").value, chan=$("chan").value;
+  const ratio=amount/avg, risky=["gambling","electronics","luxury","travel"].includes(cat);
+  const f=[
+    ["Amount is "+ratio.toFixed(1)+"x customer average",1.1*Math.log(1+ratio)],
+    ["Night-time transaction",hour<=5?1.2:0],
+    ["Foreign transaction",$("foreign").checked?1.5:0],
+    ["New device",$("newdev").checked?1.6:0],
+    ["Risky merchant category ("+cat+")",risky?0.9:0],
+    ["Card-not-present (ecom)",chan==="ecom"?0.9:0],
+    ["Far from home ("+Math.round(dist)+" km)",0.0008*Math.min(dist,5000)],
+    ["Velocity: "+vel+" txns in 24h",0.4*Math.min(vel,5)]
+  ];
+  const z=-5.6+f.reduce((s,x)=>s+x[1],0), p=1/(1+Math.exp(-z));
+  const top=f.filter(x=>x[1]>0.3).sort((a,b)=>b[1]-a[1]).slice(0,4);
+  show(p,top);
+}
+function show(p,top){
+  const flag=p>=THR;
+  $("pct").textContent=(p*100).toFixed(1)+"%";
+  $("badge").textContent=flag?"FLAGGED as fraud":"Approved";
+  $("badge").className="badge"+(flag?" bad":"");
+  $("fill").style.width=(p*100)+"%";
+  $("fill").style.background=flag?"var(--bad)":"var(--ok)";
+  $("why").innerHTML=top.length?top.map(x=>"<li>"+x[0]+"</li>").join(""):"<li style='color:var(--muted)'>No notable risk factors.</li>";
+}
+function preset(v){
+  for(const k in v){const e=$(k); if(e.type==="checkbox")e.checked=v[k]; else e.value=v[k];}
+  score();
+}
+$("go").onclick=score;
+$("p1").onclick=()=>preset({amount:45,avg:40,hour:14,dist:3,cat:"grocery",chan:"pos",vel:1,foreign:false,newdev:false});
+$("p2").onclick=()=>preset({amount:900,avg:40,hour:3,dist:4000,cat:"electronics",chan:"ecom",vel:5,foreign:true,newdev:true});
+score();
+</script>
+</body>
+</html>
